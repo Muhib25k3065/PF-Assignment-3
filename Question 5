@@ -1,37 +1,16 @@
-/* Minimal Line-Based Text Editor Buffer
-   Compatible with Dev-C++ (MinGW/GCC)
-
-   Features:
-   - Dynamic array of char* (each line stored exactly sized)
-   - malloc/realloc/free checked
-   - insertLine(index, text)
-   - deleteLine(index)
-   - printAllLines()
-   - freeAll()
-   - shrinkToFit()
-   - saveBuffer(filename), loadBuffer(filename)
-   - safe long-line input from stdin and file
-   - shifting of pointers (not copying whole strings) when inserting/deleting
-   - comments explaining why dynamic allocation reduces wastage
-
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-/* Initial capacity for dynamic array of line pointers */
 #define INITIAL_CAPACITY 4
 
-/* Editor struct holding dynamic array and meta */
 typedef struct {
-    char **lines;   /* dynamic array of pointers to strings */
-    int size;       /* number of stored lines */
-    int capacity;   /* allocated capacity (number of char* slots) */
+    char **lines;   
+    int size;      
+    int capacity;   
 } Editor;
 
-/* Utility: safe malloc with error check */
 void *safeMalloc(size_t bytes) {
     void *p = malloc(bytes);
     if (p == NULL) {
@@ -41,7 +20,6 @@ void *safeMalloc(size_t bytes) {
     return p;
 }
 
-/* Utility: safe realloc with error check */
 void *safeRealloc(void *ptr, size_t bytes) {
     void *p = realloc(ptr, bytes);
     if (p == NULL) {
@@ -51,24 +29,21 @@ void *safeRealloc(void *ptr, size_t bytes) {
     return p;
 }
 
-/* Initialize editor */
 void initEditor(Editor *ed) {
     ed->capacity = INITIAL_CAPACITY;
     ed->size = 0;
     ed->lines = (char **) safeMalloc(sizeof(char *) * ed->capacity);
 
-    /* Initialize pointers to NULL to be safe */
     {
         int i;
         for (i = 0; i < ed->capacity; i++) ed->lines[i] = NULL;
     }
 }
 
-/* Free all lines and the lines array itself */
 void freeAll(Editor *ed) {
     int i;
     for (i = 0; i < ed->size; i++) {
-        free(ed->lines[i]);  /* free each allocated string */
+        free(ed->lines[i]);
         ed->lines[i] = NULL;
     }
     free(ed->lines);
@@ -77,13 +52,10 @@ void freeAll(Editor *ed) {
     ed->capacity = 0;
 }
 
-/* Ensure there's room for at least one more pointer */
 void ensureCapacity(Editor *ed) {
     if (ed->size >= ed->capacity) {
-        /* Double the capacity */
         int newCap = ed->capacity * 2;
         ed->lines = (char **) safeRealloc(ed->lines, sizeof(char *) * newCap);
-        /* Initialize new slots to NULL */
         {
             int i;
             for (i = ed->capacity; i < newCap; i++) ed->lines[i] = NULL;
@@ -92,15 +64,14 @@ void ensureCapacity(Editor *ed) {
     }
 }
 
-/* shrinkToFit: reduce capacity to exactly size */
 void shrinkToFit(Editor *ed) {
     if (ed->capacity > ed->size) {
         if (ed->size == 0) {
-            /* Free and set to empty minimal array */
+
             free(ed->lines);
             ed->capacity = INITIAL_CAPACITY;
             ed->lines = (char **) safeMalloc(sizeof(char *) * ed->capacity);
-            /* initialize */
+
             {
                 int i;
                 for (i = 0; i < ed->capacity; i++) ed->lines[i] = NULL;
@@ -112,10 +83,6 @@ void shrinkToFit(Editor *ed) {
     }
 }
 
-/* Insert a copy of 'text' at position index (0-based).
-   If index == size -> append at end.
-   If index < 0 or index > size => error.
-*/
 void insertLine(Editor *ed, int index, const char *text) {
     if (index < 0 || index > ed->size) {
         fprintf(stderr, "insertLine: index %d out of range (0..%d)\n", index, ed->size);
@@ -124,22 +91,18 @@ void insertLine(Editor *ed, int index, const char *text) {
 
     ensureCapacity(ed);
 
-    /* allocate exact sized memory for the new string */
     size_t len = strlen(text);
     char *copy = (char *) safeMalloc(len + 1);
     strcpy(copy, text);
 
-    /* shift pointers to make room (shift ed->size-index pointers up one) */
     if (index < ed->size) {
         memmove(&ed->lines[index + 1], &ed->lines[index], sizeof(char *) * (ed->size - index));
     }
 
-    /* place pointer */
     ed->lines[index] = copy;
     ed->size++;
 }
 
-/* Delete line at index (0-based). Free the string and compact array. */
 void deleteLine(Editor *ed, int index) {
     if (ed->size == 0) {
         fprintf(stderr, "deleteLine: buffer is empty\n");
@@ -150,9 +113,8 @@ void deleteLine(Editor *ed, int index) {
         return;
     }
 
-    free(ed->lines[index]);  /* free string memory */
+    free(ed->lines[index]);  
 
-    /* shift pointers to fill the gap */
     if (index < ed->size - 1) {
         memmove(&ed->lines[index], &ed->lines[index + 1], sizeof(char *) * (ed->size - 1 - index));
     }
@@ -160,7 +122,6 @@ void deleteLine(Editor *ed, int index) {
     ed->size--;
 }
 
-/* Print all lines with line numbers */
 void printAllLines(Editor *ed) {
     int i;
     for (i = 0; i < ed->size; i++) {
@@ -171,9 +132,6 @@ void printAllLines(Editor *ed) {
     }
 }
 
-/* Save buffer to a file (each line followed by newline).
-   Returns 0 on success, -1 on error.
-*/
 int saveBuffer(Editor *ed, const char *filename) {
     FILE *fp = fopen(filename, "w");
     if (!fp) {
@@ -194,12 +152,7 @@ int saveBuffer(Editor *ed, const char *filename) {
     return 0;
 }
 
-/* Read a single line from FILE* (like getline) and return malloc'd string (without newline).
-   Returns NULL on EOF (no chars read) or on allocation failure (fatal).
-   Caller must free.
-*/
 char *readLineFromFile(FILE *fp) {
-    /* dynamic buffer */
     size_t cap = 128;
     size_t len = 0;
     char *buf = (char *) safeMalloc(cap);
@@ -207,13 +160,11 @@ char *readLineFromFile(FILE *fp) {
     int c;
     while ((c = fgetc(fp)) != EOF) {
         if (c == '\r') {
-            /* ignore CR (for Windows style files) */
             continue;
         }
         if (c == '\n') {
             break;
         }
-        /* append */
         if (len + 1 >= cap) {
             cap *= 2;
             buf = (char *) safeRealloc(buf, cap);
@@ -222,25 +173,18 @@ char *readLineFromFile(FILE *fp) {
     }
 
     if (len == 0 && c == EOF) {
-        /* nothing read and EOF */
         free(buf);
         return NULL;
     }
 
-    /* terminate */
     buf[len] = '\0';
 
-    /* shrink exact */
     char *exact = (char *) safeMalloc(len + 1);
     strcpy(exact, buf);
     free(buf);
     return exact;
 }
 
-/* Load buffer from file, rebuilding dynamic allocations.
-   Any existing buffer lines are freed first.
-   Returns 0 success, -1 on error.
-*/
 int loadBuffer(Editor *ed, const char *filename) {
     FILE *fp = fopen(filename, "r");
     if (!fp) {
@@ -248,7 +192,6 @@ int loadBuffer(Editor *ed, const char *filename) {
         return -1;
     }
 
-    /* Clear existing */
     {
         int i;
         for (i = 0; i < ed->size; i++) {
@@ -258,10 +201,8 @@ int loadBuffer(Editor *ed, const char *filename) {
         ed->size = 0;
     }
 
-    /* read lines */
     char *line;
     while ((line = readLineFromFile(fp)) != NULL) {
-        /* append each line */
         ensureCapacity(ed);
         ed->lines[ed->size++] = line;
     }
@@ -270,9 +211,6 @@ int loadBuffer(Editor *ed, const char *filename) {
     return 0;
 }
 
-/* Safe input routine to read a possibly long line from stdin.
-   It returns a malloc'd string without the trailing newline (caller frees).
-*/
 char *readLineFromStdin(void) {
     size_t cap = 128;
     size_t len = 0;
@@ -280,7 +218,7 @@ char *readLineFromStdin(void) {
 
     int c;
     while ((c = getchar()) != EOF) {
-        if (c == '\r') continue;  /* ignore CR */
+        if (c == '\r') continue; 
         if (c == '\n') break;
         if (len + 1 >= cap) {
             cap *= 2;
@@ -289,21 +227,18 @@ char *readLineFromStdin(void) {
         buf[len++] = (char)c;
     }
 
-    /* If EOF and nothing read, return NULL to indicate no input */
     if (len == 0 && c == EOF) {
         free(buf);
         return NULL;
     }
 
     buf[len] = '\0';
-    /* shrink to exact size */
     char *exact = (char *) safeMalloc(len + 1);
     strcpy(exact, buf);
     free(buf);
     return exact;
 }
 
-/* Simple interactive menu for testing */
 void menu(Editor *ed) {
     int running = 1;
     while (running) {
@@ -325,11 +260,9 @@ void menu(Editor *ed) {
             int idx;
             if (scanf("%d", &idx) != 1) {
                 fprintf(stderr, "Invalid index.\n");
-                /* flush rest of line */
                 int ch; while ((ch = getchar()) != '\n' && ch != EOF) {}
                 continue;
             }
-            /* consume newline before reading line */
             int ch; while ((ch = getchar()) != '\n' && ch != EOF) {}
             printf("Enter text line: ");
             char *line = readLineFromStdin();
@@ -386,21 +319,10 @@ void menu(Editor *ed) {
         }
         else {
             printf("Unknown command '%s'\n", cmd);
-            /* flush rest of line */
             int ch; while ((ch = getchar()) != '\n' && ch != EOF) {}
         }
     }
 }
-
-/* EXPLANATION:
-   - Using a dynamic array of char* allows us to allocate exactly the memory for each line,
-     e.g. line of length 10 uses 11 bytes (10 chars + null), not a big fixed buffer per line.
-   - This reduces memory waste compared to a static 2D char array like char lines[MAX_LINES][MAX_LEN]
-     where MAX_LEN * MAX_LINES could be huge even if most lines are short.
-   - We only allocate the pointer array (char**) and then allocate per-line strings on demand.
-   - When more lines are needed, the pointer array grows via realloc, which adjusts the pointer block.
-   - When deleting, we free only the line's memory and shift pointers (cheap) rather than copying long strings.
-*/
 
 int main(void) {
     Editor ed;
