@@ -1,0 +1,128 @@
+#include <stdio.h>
+#include <string.h>
+
+struct Employee {
+    int id;
+    char name[50];
+    char designation[50];
+    float salary;
+};
+
+void displayEmployees(struct Employee emp[], int n);
+void findHighestSalary(struct Employee emp[], int n);
+void searchEmployee(struct Employee emp[], int n);
+
+int main() {
+    int n;
+    int i;
+
+    printf("Enter number of employees: ");
+    scanf("%d", &n);
+
+    struct Employee emp[n];
+
+    for (i = 0; i < n; i++) {
+        printf("\n--- Enter details of Employee %d ---\n", i + 1);
+        
+        printf("Enter Employee ID: ");
+        scanf("%d", &emp[i].id);
+
+        printf("Enter Name: ");
+        scanf("%s", emp[i].name);
+
+        printf("Enter Designation: ");
+        scanf("%s", emp[i].designation);
+
+        printf("Enter Salary: ");
+        scanf("%f", &emp[i].salary);
+    }
+
+    printf("\n\n--- All Employee Records ---\n");
+    displayEmployees(emp, n);
+
+    printf("\n\n--- Highest Salary Employee ---\n");
+    findHighestSalary(emp, n);
+
+    printf("\n\n--- Employee Search ---\n");
+    searchEmployee(emp, n);
+
+    return 0;
+}
+
+void displayEmployees(struct Employee emp[], int n) {
+    int i;
+
+    printf("\n%-10s %-20s %-15s %-10s\n", "ID", "Name", "Designation", "Salary");
+    printf("---------------------------------------------------------------\n");
+
+    for (i = 0; i < n; i++) {
+        printf("%-10d %-20s %-15s %.2f\n", 
+                emp[i].id, 
+                emp[i].name, 
+                emp[i].designation, 
+                emp[i].salary);
+    }
+}
+
+void findHighestSalary(struct Employee emp[], int n) {
+    int i;
+    int index = 0;  
+
+    for (i = 1; i < n; i++) {
+        if (emp[i].salary > emp[index].salary) {
+            index = i;
+        }
+    }
+
+    printf("ID: %d\n", emp[index].id);
+    printf("Name: %s\n", emp[index].name);
+    printf("Designation: %s\n", emp[index].designation);
+    printf("Salary: %.2f\n", emp[index].salary);
+}
+
+void searchEmployee(struct Employee emp[], int n) {
+    int choice;
+    int idToSearch, i;
+    char nameToSearch[50];
+    int found = 0;
+
+    printf("\nSearch by:\n1. ID\n2. Name\nEnter choice: ");
+    scanf("%d", &choice);
+
+    if (choice == 1) {
+        printf("Enter ID to search: ");
+        scanf("%d", &idToSearch);
+
+        for (i = 0; i < n; i++) {
+            if (emp[i].id == idToSearch) {
+                printf("\nEmployee Found!\n");
+                printf("ID: %d\nName: %s\nDesignation: %s\nSalary: %.2f\n",
+                       emp[i].id, emp[i].name, emp[i].designation, emp[i].salary);
+                found = 1;
+                break;
+            }
+        }
+    }
+    else if (choice == 2) {
+        printf("Enter Name to search: ");
+        scanf("%s", nameToSearch);
+
+        for (i = 0; i < n; i++) {
+            if (strcmp(emp[i].name, nameToSearch) == 0) {
+                printf("\nEmployee Found!\n");
+                printf("ID: %d\nName: %s\nDesignation: %s\nSalary: %.2f\n",
+                       emp[i].id, emp[i].name, emp[i].designation, emp[i].salary);
+                found = 1;
+                break;
+            }
+        }
+    }
+    else {
+        printf("Invalid choice.\n");
+        return;
+    }
+
+    if (!found) {
+        printf("No employee found with the given criteria.\n");
+    }
+}
