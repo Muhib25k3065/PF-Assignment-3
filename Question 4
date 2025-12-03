@@ -1,0 +1,106 @@
+#include <stdio.h>
+#include <string.h>
+
+struct Book {
+    int id;
+    int popularity;
+    int lastAccess; 
+};
+
+int main() {
+    int capacity, Q;
+    int i;
+    int time = 0; 
+	
+	printf("Enter capacity: ");
+    scanf("%d" , &capacity);
+    printf("Enter Q: ");
+    scanf("%d" , &Q);
+
+    struct Book shelf[capacity];
+    int currentCount = 0;
+
+    for (i = 0; i < capacity; i++) {
+        shelf[i].id = -1;
+        shelf[i].popularity = 0;
+        shelf[i].lastAccess = -1;
+    }
+
+    while (Q--) {
+        char cmd[10];
+        printf("Enter cmd: ");
+        scanf("%s", cmd);
+
+        if (strcmp(cmd, "ADD") == 0) {
+            int x, y;
+            printf("Enter x: ");
+            scanf("%d", &x);
+            printf("Enter y: ");
+            scanf("%d", &y);
+            time++;
+
+            int found = 0;
+            for (i = 0; i < capacity; i++) {
+                if (shelf[i].id == x) {
+                    shelf[i].popularity = y;
+                    shelf[i].lastAccess = time;
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (found) continue;
+
+            if (currentCount < capacity) {
+                for (i = 0; i < capacity; i++) {
+                    if (shelf[i].id == -1) {
+                        shelf[i].id = x;
+                        shelf[i].popularity = y;
+                        shelf[i].lastAccess = time;
+                        currentCount++;
+                        break;
+                    }
+                }
+            }
+            else {
+                int oldestIndex = 0;
+                int oldestTime = shelf[0].lastAccess;
+
+                for (i = 1; i < capacity; i++) {
+                    if (shelf[i].lastAccess < oldestTime) {
+                        oldestTime = shelf[i].lastAccess;
+                        oldestIndex = i;
+                    }
+                }
+                shelf[oldestIndex].id = x;
+                shelf[oldestIndex].popularity = y;
+                shelf[oldestIndex].lastAccess = time;
+            }
+        }
+
+        else if (strcmp(cmd, "ACCESS") == 0) {
+            int x;
+            printf("Enter x: ");
+            scanf("%d", &x);
+            time++;
+
+            int found = 0;
+
+            for (i = 0; i < capacity; i++) {
+                if (shelf[i].id == x) {
+                    shelf[i].lastAccess = time; 
+                    printf("%d\n", shelf[i].popularity);
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found) {
+                printf("-1\n");
+            }
+        }
+
+    }
+
+    return 0;
+}
