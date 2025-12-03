@@ -1,0 +1,58 @@
+#include <stdio.h>
+
+void calculateFuel(int fuel, int consumption, int recharge, int solarBonus, int planet, int totalPlanets);
+
+int main(){
+	
+	int fuel;
+	int totalPlanets;
+	int consumption;
+	int recharge;
+	int solarBonus;
+	
+	printf("Enter starting fuel: ");
+	scanf("%d", &fuel);
+	
+	printf("Enter the total amount of planets to be visited: ");
+	scanf("%d", &totalPlanets);
+	
+	printf("Enter the amount of fuel that is consumed at planetary stops: ");
+	scanf("%d", &consumption);
+	
+	printf("Enter the amount of fuel that is recharged at certain gravitational zones: ");
+	scanf("%d", &recharge);
+	
+	printf("Enter the amount of fuel that is recharged after every 4 planetary stops: ");
+	scanf("%d", &solarBonus);
+	
+	calculateFuel(fuel, consumption, recharge, solarBonus, 0, totalPlanets);
+	
+	// For the gravitational zones, I am going to assume that after every 2 planets there is a gravitational zone since the question doesn't specify itself.
+	
+	return 0;
+}
+
+void calculateFuel(int fuel, int consumption, int recharge, int solarBonus, int planet, int totalPlanets){
+	planet += 1;
+	if ( fuel <= 0 ){
+		printf("\nAll fuel has been exhausted, mission can not continue.");
+		return;
+	}
+	fuel -= consumption;
+	if (planet%2 == 0){
+		fuel += recharge;
+	}
+	if (planet%4 == 0){
+		fuel += solarBonus;
+	}
+	printf("\nPlanet %d Fuel Remaining = %d", planet, fuel);
+	if ( planet == totalPlanets ){
+		printf("\nAll planets have been visited, mission complete!");
+		return;
+	}
+	if ( fuel <= 0 ){
+		printf("\nAll fuel has been exhausted, mission can not continue.");
+		return;
+	}
+	calculateFuel(fuel, consumption, recharge, solarBonus, planet, totalPlanets);
+}
