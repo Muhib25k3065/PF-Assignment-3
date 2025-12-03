@@ -1,0 +1,56 @@
+#include <stdio.h>
+
+double calculateRepayment(double loan, double interestRate, int years);
+
+int main() {
+    double loan = 100000;
+    double interest = 0.05;
+    int years = 3;
+
+    double totalPaid = calculateRepayment(loan, interest, years);
+
+    printf("\nTotal repayment over %d years = %.2f\n", years, totalPaid);
+
+    return 0;
+}
+
+double calculateRepayment(double loan, double interestRate, int years) {
+
+    if (loan <= 0 || years == 0) {
+        return 0; 
+    }
+
+    double installment = 30000; 
+
+    loan = loan + (loan * interestRate);
+
+    double payment;
+    if (loan >= installment) {
+        payment = installment;
+        loan -= installment;
+    } else {
+        payment = loan;  
+        loan = 0;
+    }
+
+    printf("Year %d: Remaining loan = %.2f\n", years, loan);
+
+    return payment + calculateRepayment(loan, interestRate, years - 1);
+}
+
+// Why Recursion Works Well Here
+
+// Each year depends on the loan left from the previous year.
+// Recursion naturally carries forward this updated state.
+// Each recursive call represents one year of the loan.
+// Cleaner than loops because the loan state is embedded in the function calls.
+
+//To logically extend:
+
+//Add another parameter:
+
+//double calculateRepayment(double loan, double interestRate, int years, double extraPayment)
+
+//Then change payment:
+
+//payment = installment + extraPayment;
