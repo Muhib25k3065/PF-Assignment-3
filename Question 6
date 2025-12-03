@@ -1,0 +1,514 @@
+/*
+ IEEE/ACM Membership Registration Manager
+ Dev-C++ compatible (GCC/MinGW)
+
+ Features:
+ - Student struct with fixed-size char arrays
+ - Dynamic in-memory array of Student (malloc/realloc)
+ - Persistent binary storage in "members.dat"
+ - loadDatabase(), saveDatabase(), addStudent(), updateStudent(), deleteStudent()
+ - Menu-driven interface
+ - Duplicate ID checking, batch-wise reports
+ - Error checking on all file and memory operations
+ - No dynamic pointers inside Student -> easy binary read/write
+*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
+#define DB_FILENAME "members.dat"
+
+/* Field sizes (include space for null terminator) */
+#define NAME_SIZE 100
+#define BATCH_SIZE 32
+#define MEMTYPE_SIZE 8
+#define DATE_SIZE 11 /* "YYYY-MM-DD" + '\0' */
+#define INTEREST_SIZE 8
+
+/* Student struct */
+typedef struct {
+    int studentID;                         /* unique */
+    char fullName[NAME_SIZE];
+    char batch[BATCH_SIZE];                /* CS, SE, Cyber Security, AI */
+    char membershipType[MEMTYPE_SIZE];     /* IEEE or ACM */
+    char registrationDate[DATE_SIZE];      /* YYYY-MM-DD */
+    char dateOfBirth[DATE_SIZE];           /* YYYY-MM-DD */
+    char interestIn[INTEREST_SIZE];        /* IEEE / ACM / Both */
+} Student;
+
+/* Utility: safe malloc */
+void *safeMalloc(size_t bytes) {
+    void *p = malloc(bytes);
+    if (p == NULL) {
+        fprintf(stderr, "Fatal: malloc failed for %zu bytes. Exiting.\n", bytes);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+
+/* Utility: safe realloc */
+void *safeRealloc(void *ptr, size_t bytes) {
+    void *p = realloc(ptr, bytes);
+    if (p == NULL) {
+        fprintf(stderr, "Fatal: realloc failed for %zu bytes. Exiting.\n", bytes);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+
+/* Read a trimmed line from stdin into dest (destSize includes '\0') */
+void readLine(const char *prompt, char *dest, int destSize) {
+    int ch;
+    int i = 0;
+    if (prompt) {
+        printf("%s", prompt);
+    }
+    /* Use fgets to read; but first clear any leftover newline */
+    if (fgets(dest, destSize, stdin) == NULL) {
+        /* EOF or error; ensure dest is empty string */
+        dest[0] = '\0';
+        return;
+    }
+    /* Remove trailing newline if present */
+    size_t len = strlen(dest);
+    if (len > 0 && dest[len-1] == '\n') dest[len-1] = '\0';
+}
+
+/* Helper to clear leftover input (when mixing scanf and fgets) */
+void clearStdin(void) {
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF) {}
+}
+
+/* Load all student records from filename into memory.
+   Returns pointer to dynamically allocated array (or NULL if no records).
+   *countOut receives number of records loaded.
+*/
+Student *loadDatabase(const char *filename, int *countOut) {
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) {
+        /* If file doesn't exist, return empty DB (not an error) */
+        if (errno == ENOENT) {
+            *countOut = 0;
+            return NULL;
+        }
+        fprintf(stderr, "Error opening file '%s' for reading: %s\n", filename, strerror(errno));
+        *countOut = 0;
+        return NULL;
+    }
+
+    /* Seek to end to determine file size */
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fprintf(stderr, "Error seeking file: %s\n", strerror(errno));
+        fclose(fp);
+        *countOut = 0;
+        return NULL;
+    }
+    long fileSize = ftell(fp);
+    if (fileSize < 0) {
+        fprintf(stderr, "ftell failed: %s\n", strerror(errno));
+        fclose(fp);
+        *countOut = 0;
+        return NULL;
+    }
+    rewind(fp);
+
+    /* Compute record count */
+    size_t recSize = sizeof(Student);
+    if (fileSize % recSize != 0) {
+        fprintf(stderr, "Warning: file size not multiple of Student size; possible corruption.\n");
+    }
+    int count = (int)(fileSize / recSize);
+
+    if (count == 0) {
+        fclose(fp);
+        *countOut = 0;
+        return NULL;
+    }
+
+    Student *arr = (Student *) safeMalloc(sizeof(Student) * count);
+
+    size_t read = fread(arr, recSize, count, fp);
+    if (read != (size_t)count) {
+        fprintf(stderr, "Error reading records: expected %d, got %zu\n", count, read);
+        free(arr);
+        fclose(fp);
+        *countOut = 0;
+        return NULL;
+    }
+
+    fclose(fp);
+    *countOut = count;
+    return arr;
+}
+
+/* Save entire in-memory array (arr with count entries) to filename (overwrite).
+   Return 0 on success, -1 on error.
+*/
+int saveDatabase(const char *filename, Student *arr, int count) {
+    FILE *fp = fopen(filename, "wb");
+    if (!fp) {
+        fprintf(stderr, "Error opening file '%s' for writing: %s\n", filename, strerror(errno));
+        return -1;
+    }
+
+    if (count > 0) {
+        size_t written = fwrite(arr, sizeof(Student), count, fp);
+        if (written != (size_t)count) {
+            fprintf(stderr, "Error writing records to file: wrote %zu out of %d\n", written, count);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    fclose(fp);
+    return 0;
+}
+
+/* Find index of student by ID in arr (count). Returns index or -1 if not found. */
+int findStudentIndexByID(Student *arr, int count, int studentID) {
+    int i;
+    for (i = 0; i < count; i++) {
+        if (arr[i].studentID == studentID) return i;
+    }
+    return -1;
+}
+
+/* Display a single Student record */
+void printStudent(const Student *s) {
+    printf("ID: %d\n", s->studentID);
+    printf("Name: %s\n", s->fullName);
+    printf("Batch: %s\n", s->batch);
+    printf("Membership Type: %s\n", s->membershipType);
+    printf("Registration Date: %s\n", s->registrationDate);
+    printf("Date of Birth: %s\n", s->dateOfBirth);
+    printf("Interest In: %s\n", s->interestIn);
+    printf("-----------------------------------------\n");
+}
+
+/* Append a student to the in-memory array. Resize if needed.
+   Returns pointer to new array (may be same as old) and updates *count and *capacity.
+*/
+Student *appendStudentInMemory(Student *arr, int *count, int *capacity, const Student *s) {
+    if (*count >= *capacity) {
+        int newCap = (*capacity == 0) ? 8 : (*capacity * 2);
+        arr = (Student *) safeRealloc(arr, sizeof(Student) * newCap);
+        *capacity = newCap;
+    }
+    arr[*count] = *s; /* struct copy */
+    (*count)++;
+    return arr;
+}
+
+/* Add a student: checks duplicate ID, appends to memory, and appends to file.
+   arrPtr and countPtr and capacityPtr are updated accordingly.
+   Returns 0 on success, -1 on error (duplicate ID or file error).
+*/
+int addStudent(Student **arrPtr, int *countPtr, int *capacityPtr, const char *filename, const Student *s) {
+    Student *arr = *arrPtr;
+    int count = *countPtr;
+    int capacity = *capacityPtr;
+
+    if (findStudentIndexByID(arr, count, s->studentID) != -1) {
+        printf("Error: Student ID %d already exists. Aborting add.\n", s->studentID);
+        return -1;
+    }
+
+    /* First append to file (open in append binary mode) */
+    FILE *fp = fopen(filename, "ab");
+    if (!fp) {
+        /* If we can't append, still attempt to add to memory? Safer to abort */
+        fprintf(stderr, "Error opening file '%s' for appending: %s\n", filename, strerror(errno));
+        return -1;
+    }
+    size_t written = fwrite(s, sizeof(Student), 1, fp);
+    if (written != 1) {
+        fprintf(stderr, "Error writing new student to file: %s\n", strerror(errno));
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+
+    /* Now append to memory */
+    arr = appendStudentInMemory(arr, &count, &capacity, s);
+
+    *arrPtr = arr;
+    *countPtr = count;
+    *capacityPtr = capacity;
+    return 0;
+}
+
+/* Update student record (batch or membership type). We update memory and then call saveDatabase to persist.
+   Returns 0 on success, -1 if not found or save error.
+*/
+int updateStudent(Student *arr, int count, int studentID, const char *filename) {
+    int idx = findStudentIndexByID(arr, count, studentID);
+    if (idx == -1) {
+        printf("Student with ID %d not found.\n", studentID);
+        return -1;
+    }
+
+    printf("Current record:\n");
+    printStudent(&arr[idx]);
+
+    /* Ask what to update: batch or membership type or interest */
+    printf("Update options:\n");
+    printf("1) Batch (CS/SE/Cyber Security/AI)\n");
+    printf("2) Membership Type (IEEE/ACM)\n");
+    printf("3) Interest In (IEEE/ACM/Both)\n");
+    printf("Enter choice (1-3): ");
+    int choice;
+    if (scanf("%d", &choice) != 1) {
+        clearStdin();
+        printf("Invalid input.\n");
+        return -1;
+    }
+    clearStdin();
+
+    if (choice == 1) {
+        char newBatch[BATCH_SIZE];
+        readLine("Enter new Batch: ", newBatch, BATCH_SIZE);
+        strncpy(arr[idx].batch, newBatch, BATCH_SIZE-1);
+        arr[idx].batch[BATCH_SIZE-1] = '\0';
+    } else if (choice == 2) {
+        char newType[MEMTYPE_SIZE];
+        readLine("Enter Membership Type (IEEE/ACM): ", newType, MEMTYPE_SIZE);
+        strncpy(arr[idx].membershipType, newType, MEMTYPE_SIZE-1);
+        arr[idx].membershipType[MEMTYPE_SIZE-1] = '\0';
+    } else if (choice == 3) {
+        char newInterest[INTEREST_SIZE];
+        readLine("Enter Interest In (IEEE/ACM/Both): ", newInterest, INTEREST_SIZE);
+        strncpy(arr[idx].interestIn, newInterest, INTEREST_SIZE-1);
+        arr[idx].interestIn[INTEREST_SIZE-1] = '\0';
+    } else {
+        printf("Invalid choice.\n");
+        return -1;
+    }
+
+    /* Save entire DB to persist updates safely */
+    if (saveDatabase(filename, arr, count) != 0) {
+        fprintf(stderr, "Error saving database after update.\n");
+        return -1;
+    }
+    printf("Record updated and saved.\n");
+    return 0;
+}
+
+/* Delete a student by ID: remove from memory array (shift) and save DB to file.
+   Returns 0 on success, -1 if not found or save error.
+*/
+int deleteStudent(Student **arrPtr, int *countPtr, const char *filename, int studentID) {
+    Student *arr = *arrPtr;
+    int count = *countPtr;
+
+    int idx = findStudentIndexByID(arr, count, studentID);
+    if (idx == -1) {
+        printf("Student with ID %d not found.\n", studentID);
+        return -1;
+    }
+
+    /* Shift remaining records left by one */
+    if (idx < count - 1) {
+        memmove(&arr[idx], &arr[idx+1], sizeof(Student) * (count - 1 - idx));
+    }
+    count--;
+    /* Optionally shrink memory here, but we'll keep capacity for performance */
+
+    /* Save entire DB to file (rewrite file safely) */
+    if (saveDatabase(filename, arr, count) != 0) {
+        fprintf(stderr, "Error saving database after delete.\n");
+        return -1;
+    }
+
+    *arrPtr = arr;
+    *countPtr = count;
+    printf("Student ID %d deleted and changes saved.\n", studentID);
+    return 0;
+}
+
+/* Display all students */
+void displayAllStudents(Student *arr, int count) {
+    if (count == 0) {
+        printf("No records found.\n");
+        return;
+    }
+    int i;
+    for (i = 0; i < count; i++) {
+        printf("Record %d:\n", i+1);
+        printStudent(&arr[i]);
+    }
+}
+
+/* Generate batch-wise report: list all students for a given batch and membership filter */
+void batchReport(Student *arr, int count) {
+    char batchFilter[BATCH_SIZE];
+    char membershipFilter[MEMTYPE_SIZE];
+    readLine("Enter batch to report (CS/SE/Cyber Security/AI): ", batchFilter, BATCH_SIZE);
+    readLine("Enter membership filter (IEEE/ACM/Both/All): ", membershipFilter, MEMTYPE_SIZE);
+
+    int i;
+    int found = 0;
+    for (i = 0; i < count; i++) {
+        int batchMatch = (strcmp(arr[i].batch, batchFilter) == 0);
+        int memMatch = 0;
+        if (strcmp(membershipFilter, "All") == 0 || strcmp(membershipFilter, "all") == 0) memMatch = 1;
+        else if (strcmp(membershipFilter, "Both") == 0 || strcmp(membershipFilter, "both") == 0) {
+            /* interestIn field indicates interest, not membership type; we interpret question as membership filter: IEEE/ACM/Both */
+            /* To follow request: if membershipFilter=="Both", include both IEEE and ACM */
+            memMatch = 1;
+        } else {
+            memMatch = (strcmp(arr[i].membershipType, membershipFilter) == 0);
+        }
+
+        if (batchMatch && memMatch) {
+            printStudent(&arr[i]);
+            found = 1;
+        }
+    }
+    if (!found) {
+        printf("No matching records for batch='%s' membership='%s'\n", batchFilter, membershipFilter);
+    }
+}
+
+/* Helper to create a Student from user input */
+Student inputStudentInteractive() {
+    Student s;
+    char buf[256];
+
+    printf("Enter student details:\n");
+
+    /* Student ID */
+    printf("Student ID (integer): ");
+    while (scanf("%d", &s.studentID) != 1) {
+        clearStdin();
+        printf("Invalid input. Enter integer Student ID: ");
+    }
+    clearStdin();
+
+    /* Full name */
+    readLine("Full Name: ", s.fullName, NAME_SIZE);
+
+    /* Batch */
+    readLine("Batch (CS/SE/Cyber Security/AI): ", s.batch, BATCH_SIZE);
+
+    /* Membership Type */
+    readLine("Membership Type (IEEE/ACM): ", s.membershipType, MEMTYPE_SIZE);
+
+    /* Registration Date */
+    readLine("Registration Date (YYYY-MM-DD): ", s.registrationDate, DATE_SIZE);
+
+    /* Date of Birth */
+    readLine("Date of Birth (YYYY-MM-DD): ", s.dateOfBirth, DATE_SIZE);
+
+    /* Interest In */
+    readLine("Interest In (IEEE/ACM/Both): ", s.interestIn, INTEREST_SIZE);
+
+    return s;
+}
+
+/* Main menu */
+int main(void) {
+    Student *arr = NULL;
+    int count = 0;
+    int capacity = 0;
+    int i;
+
+    /* Load existing DB */
+    Student *loaded = loadDatabase(DB_FILENAME, &count);
+    if (loaded) {
+        arr = loaded;
+        /* set capacity to count (we can expand later) */
+        capacity = count;
+        if (capacity < 8) capacity = 8;
+        arr = (Student *) safeRealloc(arr, sizeof(Student) * capacity);
+    } else {
+        /* start with empty DB and small capacity */
+        capacity = 8;
+        arr = (Student *) safeMalloc(sizeof(Student) * capacity);
+        count = 0;
+    }
+
+    printf("IEEE/ACM Membership Registration Manager\n");
+    printf("Loaded %d records from %s\n", count, DB_FILENAME);
+
+    int running = 1;
+    while (running) {
+        printf("\nMenu:\n");
+        printf("1) Register New Student\n");
+        printf("2) Update Student (batch/membership/interest)\n");
+        printf("3) Delete Student\n");
+        printf("4) View All Registrations\n");
+        printf("5) Generate Batch-wise Report\n");
+        printf("6) Save Database Now\n");
+        printf("7) Exit\n");
+        printf("Enter choice: ");
+
+        int choice;
+        if (scanf("%d", &choice) != 1) {
+            clearStdin();
+            printf("Invalid input.\n");
+            continue;
+        }
+        clearStdin();
+
+        if (choice == 1) {
+            Student s = inputStudentInteractive();
+            int res = addStudent(&arr, &count, &capacity, DB_FILENAME, &s);
+            if (res == 0) {
+                printf("Student added successfully and saved to %s.\n", DB_FILENAME);
+            } else {
+                printf("Failed to add student.\n");
+            }
+        } else if (choice == 2) {
+            int id;
+            printf("Enter Student ID to update: ");
+            if (scanf("%d", &id) != 1) {
+                clearStdin();
+                printf("Invalid ID.\n");
+                continue;
+            }
+            clearStdin();
+            if (updateStudent(arr, count, id, DB_FILENAME) != 0) {
+                printf("Update failed or cancelled.\n");
+            }
+        } else if (choice == 3) {
+            int id;
+            printf("Enter Student ID to delete: ");
+            if (scanf("%d", &id) != 1) {
+                clearStdin();
+                printf("Invalid ID.\n");
+                continue;
+            }
+            clearStdin();
+            if (deleteStudent(&arr, &count, DB_FILENAME, id) != 0) {
+                printf("Delete failed or cancelled.\n");
+            }
+        } else if (choice == 4) {
+            displayAllStudents(arr, count);
+        } else if (choice == 5) {
+            batchReport(arr, count);
+        } else if (choice == 6) {
+            if (saveDatabase(DB_FILENAME, arr, count) == 0) {
+                printf("Database saved to %s\n", DB_FILENAME);
+            } else {
+                printf("Save failed.\n");
+            }
+        } else if (choice == 7) {
+            /* Save then exit */
+            if (saveDatabase(DB_FILENAME, arr, count) == 0) {
+                printf("Database saved. Exiting...\n");
+            } else {
+                printf("Failed to save database. Exiting anyway...\n");
+            }
+            running = 0;
+        } else {
+            printf("Invalid menu choice.\n");
+        }
+    }
+
+    /* free memory */
+    free(arr);
+    return 0;
+}
